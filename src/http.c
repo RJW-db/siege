@@ -358,32 +358,26 @@ http_post(CONN *C, URL U, FACTS facts)
     }
   }
 
-  mlen = strlen(url_get_method_name(U)) +
-         strlen(fullpath) +
-         strlen(protocol) +
-         strlen(hoststr)  +
-         strlen((C->auth.www==TRUE)?authwww:"") +
-         strlen((C->auth.proxy==TRUE)?authpxy:"") +
-         strlen(cookie) +
-         strlen((strncasecmp(my.extra, "Accept:", 7)==0) ? "" : accept) +
-         sizeof(encoding) +
-         strlen(my.uagent) +
-         strlen(url_get_conttype(U)) +
-         strlen(my.extra) +
-         strlen(keepalive) + 
-         url_get_postlen(U) +
-         128; 
-   request = (char*)xmalloc(mlen);
-   memset(request, '\0', mlen);
-   memset(encoding, '\0', sizeof(encoding));
-   if (! my.get || ! my.print) {
-     snprintf(encoding, sizeof(encoding), "Accept-Encoding: %s\015\012", my.encoding); 
-   }
+// ...existing code...
+  size_t postlen = url_get_postlen(U);
+  const char *postdata = url_get_postdata(U);
 
-  /** 
-   * build a request string to
-   * post on the web server
-   */
+  // Check if the last boundary ends with \r\n, and append if missing
+  int needs_crlf = 0;
+  if (postlen < 2 || !(postdata[postlen-2] == '\r' && postdata[postlen-1] == '\n')) {
+      needs_crlf = 1;
+  }
+
+  mlen += needs_crlf * 2; // Account for extra \r\n in buffer size
+
+  request = (char*)xmalloc(mlen);
+  memset(request, '\0', mlen);
+  memset(encoding, '\0', sizeof(encoding));
+  if (! my.get || ! my.print) {
+    snprintf(encoding, sizeof(encoding), "Accept-Encoding: %s\015\012", my.encoding); 
+  }
+
+  // Build headers with correct Content-Length
   rlen = snprintf (
     request, mlen,
     "%s %s %s\015\012"
@@ -402,13 +396,20 @@ http_post(CONN *C, URL U, FACTS facts)
     (C->auth.proxy==TRUE)?authpxy:"",
     (strlen(cookie) > 8)?cookie:"", 
     (strncasecmp(my.extra, "Accept:", 7)==0) ? "" : accept,
-    encoding, my.uagent, my.extra, keepalive, url_get_conttype(U), (long)url_get_postlen(U)
+    encoding, my.uagent, my.extra, keepalive, url_get_conttype(U), (long)(postlen + needs_crlf * 2)
   );
 
   if (rlen < mlen) {
-    memcpy(request + rlen, url_get_postdata(U), url_get_postlen(U));
-    request[rlen+url_get_postlen(U)] = 0;
+    memcpy(request + rlen, postdata, postlen);
+    rlen += postlen;
+    if (needs_crlf) {
+      request[rlen++] = '\r';
+      request[rlen++] = '\n';
+    }
+    request[rlen] = 0;
   }
+  printf("POSTDATA END: [%.*s]\n", (int)postlen, postdata);
+// ...existing code...
   rlen += url_get_postlen(U);
  
   if (my.get || my.debug || my.print) printf("%s\n\n", request);
