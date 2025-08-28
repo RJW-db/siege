@@ -176,6 +176,7 @@ http_get(CONN *C, URL U, FACTS facts)
       snprintf(authwww, sizeof(authwww), "%s", auth_get_basic_header(my.auth, HTTP));
     }
   }
+
   if (C->auth.proxy) {
     if (C->auth.type.proxy==DIGEST) {
       snprintf (
