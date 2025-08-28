@@ -292,8 +292,10 @@ http_post(CONN *C, URL U, FACTS facts)
   memset(protocol, '\0', sizeof(protocol));
   memset(keepalive,'\0', sizeof(keepalive));
 
+  printf("[DEBUG] Starting http_post\n");
+
   if (auth_get_proxy_required(my.auth)) {
-   sprintf(
+    sprintf(
       fullpath, 
       "%s://%s:%d%s", 
       C->encrypt == FALSE?"http":"https", url_get_hostname(U), url_get_port(U), url_get_request(U)
@@ -302,16 +304,14 @@ http_post(CONN *C, URL U, FACTS facts)
     sprintf(fullpath, "%s", url_get_request(U));
   }
 
+  printf("[DEBUG] fullpath: %s\n", fullpath);
+
   if ((url_get_port(U)==80 && C->encrypt==FALSE) || (url_get_port(U)==443 && C->encrypt==TRUE)) {
     portstr[0] = '\0';  ;
   } else {
     snprintf(portstr, sizeof portstr, ":%d", url_get_port(U));
   }
 
-  /** 
-   * Set the protocol and keepalive strings
-   * based on configuration conditions.... 
-   */
   if (my.protocol == FALSE || my.get == TRUE || my.print == TRUE) { 
     snprintf(protocol, sizeof(protocol), "HTTP/1.0");
   } else {
@@ -323,7 +323,11 @@ http_post(CONN *C, URL U, FACTS facts)
     snprintf(keepalive, sizeof(keepalive), "close");
   }
 
+  printf("[DEBUG] protocol: %s, keepalive: %s\n", protocol, keepalive);
+
   cookies_header(facts->jar, url_get_hostname(U), cookie);
+  printf("[DEBUG] cookie: %s\n", cookie);
+
   if (C->auth.www) {
     if (C->auth.type.www==DIGEST) {
       snprintf (
@@ -335,6 +339,7 @@ http_post(CONN *C, URL U, FACTS facts)
     } else {
       snprintf(authwww, sizeof(authwww), "%s", auth_get_basic_header(my.auth, HTTP));
     }
+    printf("[DEBUG] authwww: %s\n", authwww);
   }
   if (C->auth.proxy) {
     if (C->auth.type.proxy==DIGEST) {
@@ -345,40 +350,58 @@ http_post(CONN *C, URL U, FACTS facts)
     } else  {
       snprintf(authpxy, sizeof(authpxy), "%s", auth_get_basic_header(my.auth, PROXY));
     }
+    printf("[DEBUG] authpxy: %s\n", authpxy);
   }
 
-  /* Only send the Host header if one wasn't provided by the configuration. */
   if (strncasestr(my.extra, "host:", sizeof(my.extra)) == NULL) {
-    // as per RFC2616 14.23, send the port if it's not default
     if ((url_get_scheme(U) == HTTP  && url_get_port(U) != 80) ||
         (url_get_scheme(U) == HTTPS && url_get_port(U) != 443)) {
       rlen = snprintf(hoststr, sizeof(hoststr), "Host: %s:%d\015\012", url_get_hostname(U), url_get_port(U));
     } else {
       rlen = snprintf(hoststr, sizeof(hoststr), "Host: %s\015\012", url_get_hostname(U));
     }
+    printf("[DEBUG] hoststr: %s\n", hoststr);
   }
 
-// ...existing code...
-size_t postlen = url_get_postlen(U);
-const char *postdata = url_get_postdata(U);
+  size_t postlen = url_get_postlen(U);
+  const char *postdata = url_get_postdata(U);
 
-// Check if the last boundary ends with \r\n, and append if missing
-int needs_crlf = 0;
-if (postlen < 2 || !(postdata[postlen-2] == '\r' && postdata[postlen-1] == '\n')) {
+  printf("[DEBUG] postlen: %zu\n", postlen);
+  printf("[DEBUG] postdata (first 100 bytes):\n%.*s\n", (int)(postlen > 100 ? 100 : postlen), postdata);
+
+  int needs_crlf = 0;
+  if (postlen < 2 || !(postdata[postlen-2] == '\r' && postdata[postlen-1] == '\n')) {
     needs_crlf = 1;
-}
+    printf("[DEBUG] postdata missing final CRLF, will append\n");
+  } else {
+    printf("[DEBUG] postdata ends with CRLF\n");
+  }
 
-// Allocate enough space for headers + postdata + possible extra \r\n
-mlen += postlen + (needs_crlf * 2);
+  mlen = strlen(url_get_method_name(U)) +
+         strlen(fullpath) +
+         strlen(protocol) +
+         strlen(hoststr)  +
+         strlen((C->auth.www==TRUE)?authwww:"") +
+         strlen((C->auth.proxy==TRUE)?authpxy:"") +
+         strlen(cookie) +
+         strlen((strncasecmp(my.extra, "Accept:", 7)==0) ? "" : accept) +
+         sizeof(encoding) +
+         strlen(my.uagent) +
+         strlen(my.extra) +
+         strlen(keepalive) +
+         256; // extra for headers
 
-request = (char*)xmalloc(mlen);
-memset(request, '\0', mlen);
+  mlen += postlen + (needs_crlf * 2);
+
+  printf("[DEBUG] mlen (total buffer size): %zu\n", mlen);
+
+  request = (char*)xmalloc(mlen);
+  memset(request, '\0', mlen);
   memset(encoding, '\0', sizeof(encoding));
   if (! my.get || ! my.print) {
     snprintf(encoding, sizeof(encoding), "Accept-Encoding: %s\015\012", my.encoding); 
   }
 
-  // Build headers with correct Content-Length
   rlen = snprintf (
     request, mlen,
     "%s %s %s\015\012"
@@ -400,31 +423,42 @@ memset(request, '\0', mlen);
     encoding, my.uagent, my.extra, keepalive, url_get_conttype(U), (long)(postlen + needs_crlf * 2)
   );
 
+  printf("[DEBUG] rlen after snprintf (header length): %zu\n", rlen);
+
   if (rlen < mlen) {
-    printf("ever here?");
+    printf("[DEBUG] Copying postdata to request buffer at offset %zu\n", rlen);
     memcpy(request + rlen, postdata, postlen);
     rlen += postlen;
     if (needs_crlf) {
+      printf("[DEBUG] Appending CRLF at offset %zu\n", rlen);
       request[rlen++] = '\r';
       request[rlen++] = '\n';
     }
     request[rlen] = 0;
+  } else {
+    printf("[DEBUG] rlen >= mlen, not copying postdata\n");
   }
-  printf("POSTDATA END: [%.*s]\n", (int)postlen, postdata);
-// ...existing code...
-  // rlen += url_get_postlen(U);
- 
-  if (my.get || my.debug || my.print) printf("%s\n\n", request);
+
+  printf("[DEBUG] POSTDATA END: [%.*s]\n", (int)postlen, postdata);
+  printf("[DEBUG] Final request buffer length: %zu\n", rlen);
+
+  if (my.get || my.debug || my.print) printf("[DEBUG] Final request:\n%s\n\n", request);
 
   if (rlen == 0 || rlen > mlen) {
+    printf("[DEBUG] Buffer overrun detected! rlen: %zu, mlen: %zu\n", rlen, mlen);
     NOTIFY(FATAL, "HTTP %s: request buffer overrun! Unable to continue...", url_get_method_name(U)); 
   }
 
   if ((socket_write(C, request, rlen)) < 0) {
+    printf("[DEBUG] socket_write failed\n");
+    xfree(request);
     return FALSE;
   }
 
+  printf("[DEBUG] socket_write succeeded\n");
+
   xfree(request);
+  printf("[DEBUG] Finished http_post\n");
   return TRUE;
 }
 
