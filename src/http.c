@@ -359,19 +359,20 @@ http_post(CONN *C, URL U, FACTS facts)
   }
 
 // ...existing code...
-  size_t postlen = url_get_postlen(U);
-  const char *postdata = url_get_postdata(U);
+size_t postlen = url_get_postlen(U);
+const char *postdata = url_get_postdata(U);
 
-  // Check if the last boundary ends with \r\n, and append if missing
-  int needs_crlf = 0;
-  if (postlen < 2 || !(postdata[postlen-2] == '\r' && postdata[postlen-1] == '\n')) {
-      needs_crlf = 1;
-  }
+// Check if the last boundary ends with \r\n, and append if missing
+int needs_crlf = 0;
+if (postlen < 2 || !(postdata[postlen-2] == '\r' && postdata[postlen-1] == '\n')) {
+    needs_crlf = 1;
+}
 
-  mlen += needs_crlf * 2; // Account for extra \r\n in buffer size
+// Allocate enough space for headers + postdata + possible extra \r\n
+mlen += postlen + (needs_crlf * 2);
 
-  request = (char*)xmalloc(mlen);
-  memset(request, '\0', mlen);
+request = (char*)xmalloc(mlen);
+memset(request, '\0', mlen);
   memset(encoding, '\0', sizeof(encoding));
   if (! my.get || ! my.print) {
     snprintf(encoding, sizeof(encoding), "Accept-Encoding: %s\015\012", my.encoding); 
@@ -400,6 +401,7 @@ http_post(CONN *C, URL U, FACTS facts)
   );
 
   if (rlen < mlen) {
+    printf("ever here?");
     memcpy(request + rlen, postdata, postlen);
     rlen += postlen;
     if (needs_crlf) {
