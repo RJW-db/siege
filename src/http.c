@@ -291,7 +291,6 @@ http_post(CONN *C, URL U, FACTS facts)
   memset(protocol, '\0', sizeof(protocol));
   memset(keepalive,'\0', sizeof(keepalive));
 
-
   if (auth_get_proxy_required(my.auth)) {
     sprintf(
       fullpath, 
@@ -301,7 +300,6 @@ http_post(CONN *C, URL U, FACTS facts)
   } else {
     sprintf(fullpath, "%s", url_get_request(U));
   }
-
 
   if ((url_get_port(U)==80 && C->encrypt==FALSE) || (url_get_port(U)==443 && C->encrypt==TRUE)) {
     portstr[0] = '\0';  ;
@@ -319,7 +317,6 @@ http_post(CONN *C, URL U, FACTS facts)
   } else {
     snprintf(keepalive, sizeof(keepalive), "close");
   }
-
 
   cookies_header(facts->jar, url_get_hostname(U), cookie);
 
@@ -358,11 +355,9 @@ http_post(CONN *C, URL U, FACTS facts)
   size_t postlen = url_get_postlen(U);
   const char *postdata = url_get_postdata(U);
 
-
   int needs_crlf = 0;
   if (postlen < 2 || !(postdata[postlen-2] == '\r' && postdata[postlen-1] == '\n')) {
     needs_crlf = 1;
-  } else {
   }
 
   mlen = strlen(url_get_method_name(U)) +
@@ -380,7 +375,6 @@ http_post(CONN *C, URL U, FACTS facts)
          256; // extra for headers
 
   mlen += postlen + (needs_crlf * 2);
-
 
   request = (char*)xmalloc(mlen);
   memset(request, '\0', mlen);
@@ -410,7 +404,6 @@ http_post(CONN *C, URL U, FACTS facts)
     encoding, my.uagent, my.extra, keepalive, url_get_conttype(U), (long)(postlen + needs_crlf * 2)
   );
 
-
   if (rlen < mlen) {
     memcpy(request + rlen, postdata, postlen);
     rlen += postlen;
@@ -419,10 +412,7 @@ http_post(CONN *C, URL U, FACTS facts)
       request[rlen++] = '\n';
     }
     request[rlen] = 0;
-  } else {
   }
-
-
 
   if (rlen == 0 || rlen > mlen) {
     NOTIFY(FATAL, "HTTP %s: request buffer overrun! Unable to continue...", url_get_method_name(U)); 
@@ -432,7 +422,6 @@ http_post(CONN *C, URL U, FACTS facts)
     xfree(request);
     return FALSE;
   }
-
 
   xfree(request);
   return TRUE;
