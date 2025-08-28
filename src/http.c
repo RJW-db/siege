@@ -249,7 +249,6 @@ http_get(CONN *C, URL U, FACTS facts)
 
   /**
    * XXX: I hate to use a printf here (as opposed to echo) but we
-   * don't want to preface the headers with [debug] in debug mode
    */
   if ((my.debug || my.get || my.print) && !my.quiet) { printf("%s\n", request); fflush(stdout); }
   
@@ -292,7 +291,6 @@ http_post(CONN *C, URL U, FACTS facts)
   memset(protocol, '\0', sizeof(protocol));
   memset(keepalive,'\0', sizeof(keepalive));
 
-  printf("[DEBUG] Starting http_post\n");
 
   if (auth_get_proxy_required(my.auth)) {
     sprintf(
@@ -304,7 +302,6 @@ http_post(CONN *C, URL U, FACTS facts)
     sprintf(fullpath, "%s", url_get_request(U));
   }
 
-  printf("[DEBUG] fullpath: %s\n", fullpath);
 
   if ((url_get_port(U)==80 && C->encrypt==FALSE) || (url_get_port(U)==443 && C->encrypt==TRUE)) {
     portstr[0] = '\0';  ;
@@ -323,10 +320,8 @@ http_post(CONN *C, URL U, FACTS facts)
     snprintf(keepalive, sizeof(keepalive), "close");
   }
 
-  printf("[DEBUG] protocol: %s, keepalive: %s\n", protocol, keepalive);
 
   cookies_header(facts->jar, url_get_hostname(U), cookie);
-  printf("[DEBUG] cookie: %s\n", cookie);
 
   if (C->auth.www) {
     if (C->auth.type.www==DIGEST) {
@@ -339,7 +334,6 @@ http_post(CONN *C, URL U, FACTS facts)
     } else {
       snprintf(authwww, sizeof(authwww), "%s", auth_get_basic_header(my.auth, HTTP));
     }
-    printf("[DEBUG] authwww: %s\n", authwww);
   }
   if (C->auth.proxy) {
     if (C->auth.type.proxy==DIGEST) {
@@ -350,7 +344,6 @@ http_post(CONN *C, URL U, FACTS facts)
     } else  {
       snprintf(authpxy, sizeof(authpxy), "%s", auth_get_basic_header(my.auth, PROXY));
     }
-    printf("[DEBUG] authpxy: %s\n", authpxy);
   }
 
   if (strncasestr(my.extra, "host:", sizeof(my.extra)) == NULL) {
@@ -360,21 +353,16 @@ http_post(CONN *C, URL U, FACTS facts)
     } else {
       rlen = snprintf(hoststr, sizeof(hoststr), "Host: %s\015\012", url_get_hostname(U));
     }
-    printf("[DEBUG] hoststr: %s\n", hoststr);
   }
 
   size_t postlen = url_get_postlen(U);
   const char *postdata = url_get_postdata(U);
 
-  printf("[DEBUG] postlen: %zu\n", postlen);
-  printf("[DEBUG] postdata (first 100 bytes):\n%.*s\n", (int)(postlen > 100 ? 100 : postlen), postdata);
 
   int needs_crlf = 0;
   if (postlen < 2 || !(postdata[postlen-2] == '\r' && postdata[postlen-1] == '\n')) {
     needs_crlf = 1;
-    printf("[DEBUG] postdata missing final CRLF, will append\n");
   } else {
-    printf("[DEBUG] postdata ends with CRLF\n");
   }
 
   mlen = strlen(url_get_method_name(U)) +
@@ -393,7 +381,6 @@ http_post(CONN *C, URL U, FACTS facts)
 
   mlen += postlen + (needs_crlf * 2);
 
-  printf("[DEBUG] mlen (total buffer size): %zu\n", mlen);
 
   request = (char*)xmalloc(mlen);
   memset(request, '\0', mlen);
@@ -423,42 +410,31 @@ http_post(CONN *C, URL U, FACTS facts)
     encoding, my.uagent, my.extra, keepalive, url_get_conttype(U), (long)(postlen + needs_crlf * 2)
   );
 
-  printf("[DEBUG] rlen after snprintf (header length): %zu\n", rlen);
 
   if (rlen < mlen) {
-    printf("[DEBUG] Copying postdata to request buffer at offset %zu\n", rlen);
     memcpy(request + rlen, postdata, postlen);
     rlen += postlen;
     if (needs_crlf) {
-      printf("[DEBUG] Appending CRLF at offset %zu\n", rlen);
       request[rlen++] = '\r';
       request[rlen++] = '\n';
     }
     request[rlen] = 0;
   } else {
-    printf("[DEBUG] rlen >= mlen, not copying postdata\n");
   }
 
-  printf("[DEBUG] POSTDATA END: [%.*s]\n", (int)postlen, postdata);
-  printf("[DEBUG] Final request buffer length: %zu\n", rlen);
 
-  if (my.get || my.debug || my.print) printf("[DEBUG] Final request:\n%s\n\n", request);
 
   if (rlen == 0 || rlen > mlen) {
-    printf("[DEBUG] Buffer overrun detected! rlen: %zu, mlen: %zu\n", rlen, mlen);
     NOTIFY(FATAL, "HTTP %s: request buffer overrun! Unable to continue...", url_get_method_name(U)); 
   }
 
   if ((socket_write(C, request, rlen)) < 0) {
-    printf("[DEBUG] socket_write failed\n");
     xfree(request);
     return FALSE;
   }
 
-  printf("[DEBUG] socket_write succeeded\n");
 
   xfree(request);
-  printf("[DEBUG] Finished http_post\n");
   return TRUE;
 }
 
