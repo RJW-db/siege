@@ -410,7 +410,7 @@ http_post(CONN *C, URL U, FACTS facts)
   }
   printf("POSTDATA END: [%.*s]\n", (int)postlen, postdata);
 // ...existing code...
-  rlen += url_get_postlen(U);
+  // rlen += url_get_postlen(U);
  
   if (my.get || my.debug || my.print) printf("%s\n\n", request);
 
